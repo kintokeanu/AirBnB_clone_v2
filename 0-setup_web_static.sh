@@ -1,54 +1,57 @@
 #!/usr/bin/env bash
 # sets up both webservers for deployment
-# Function to check if a symbolic link exists and points to a specific target
-symlink_exists() {
-    local symlink=$1
-    local target=$2
-
-    [[ -L $symlink && $(readlink -f $symlink) == $target ]]
-}
-
-# Install Nginx if not already installed
-if ! command -v nginx &> /dev/null; then
-    sudo apt-get update
-    sudo apt-get install -y nginx
+sudo apt-get -y update
+if ! [ -x "$(command -v nginx)" ]; then
+    sudo apt-get -y update
+    sudo apt-get -y install nginx
 fi
 
-# Define web_static directory paths
-web_static_dir="/data/web_static"
-releases_dir="$web_static_dir/releases"
-shared_dir="$web_static_dir/shared"
-current_dir="$web_static_dir/current"
-test_release_dir="$releases_dir/test"
+sudo mkdir -p /data/web_static/shared/
+sudo mkdir -p /data/web_static/releases/test/
+sudo touch /data/web_static/releases/test/index.html
+sudo chmod go+w /data/web_static/releases/test/index.html
 
-# Create necessary directories if they don't exist
-sudo mkdir -p $releases_dir $shared_dir $test_release_dir
+html="<html>
+  <head>
+  </head>
+  <body>
+    Holberton School
+  </body>
+</html>"
 
-# Create a fake HTML file for testing
-fake_html_file="$test_release_dir/index.html"
-if [ ! -f $fake_html_file ]; then
-    echo "Hello, this is a test page." | sudo tee $fake_html_file > /dev/null
+echo "$html" | sudo tee /data/web_static/releases/test/index.html > /dev/null
+
+destination_link="/data/web_static/current"
+
+if [ -L "$destination_link" ]; then
+    rm "$destination_link"
 fi
 
-# Check if the symbolic link already exists and is correct
-if ! symlink_exists $current_dir $test_release_dir; then
-    # Remove the existing symbolic link if it's not correct or doesn't exist
-    sudo rm -f $current_dir
-    # Create the symbolic link
-    sudo ln -s $test_release_dir $current_dir
-fi
+sudo ln -s /data/web_static/releases/test/ /data/web_static/current
 
-# Give ownership of the /data/ directory to the ubuntu user and group recursively
-sudo chown -R ubuntu:ubuntu $web_static_dir
+sudo chown -R ubuntu:ubuntu /data/
 
-# Check if the Nginx configuration already contains the required alias
-if ! grep -q "location /hbnb_static/ {" /etc/nginx/sites-enabled/default; then
-    # Remove the existing alias block if it exists
-    sudo sed -i '/location \/hbnb_static\//,/\}/d' /etc/nginx/sites-enabled/default
-    # Add the alias block to the Nginx configuration
-    echo "location /hbnb_static/ {" | sudo tee -a /etc/nginx/sites-enabled/default
-    echo "    alias $current_dir/;" | sudo tee -a /etc/nginx/sites-enabled/default
-    echo "}" | sudo tee -a /etc/nginx/sites-enabled/default
-    # Restart Nginx to apply the configuration
-    sudo service nginx restart
-fi
+config="server {
+    listen 80;
+    listen [::]:80 default_server;
+    root /var/www/html;
+    index index.html;
+
+    add_header X-Served-By \$hostname;
+    location /hbnb_static {
+        alias /data/web_static/current/;
+        index index.html index.htm;
+    }
+    location /redirect_me {
+        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
+    }
+
+    error_page 404 /404.html;
+    location /404.html {
+        try_files \$uri \$uri/ =404;
+    }
+}"
+
+echo "$config" | sudo tee /etc/nginx/sites-available/default > /dev/null;
+
+sudo service nginx restart;
