@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """Start a Flask web application"""
 from flask import Flask
+from flask import render_template
 from models import storage
-from models.state import State
 
 app = Flask(__name__)
 
@@ -12,8 +12,8 @@ def display_states_list():
     """
     Displays an HTML page with a list of all State objects in DBStorage sorted by name (A->Z).
     """
-    states = storage.all(State).values()
-    states_sorted = sorted(states, key=lambda state: state.name)
+    states = storage.all("State")
+
     return render_template('7-states_list.html', states=states)
 
 
